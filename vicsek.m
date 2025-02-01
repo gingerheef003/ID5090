@@ -6,27 +6,32 @@ close all
 N = 500; % Number of agents
 Time = 10^4; % Time steps of simulation
 dt = 1; % Time step size
-sig = pi/12; % Noise strength
+sig = pi; % Noise strength
 v0 = 0.05; % Constant velocity
 L = 10; % Domain size
 RI = 1; % Radius of interaction
+show_plot = false; % Flag to show quiver plot
+show_polarization_graph = true; % Flag to show polarization graph
 
 % Initial conditions
 pos = rand(N, 2) * L; % Random initial positions within the domain
 theta = rand(N, 1) * 2 * pi; % Random initial orientations
 vel = v0 * [cos(theta) sin(theta)]; % Initial velocities
 
-% Store data for each case
+% Store data
 pos_data = zeros(N, 2, Time);
 vel_data = zeros(N, 2, Time);
 theta_data = zeros(N, Time);
+polarization_data = zeros(1, Time);
 
 % Visualization setup
-figure;
-axis equal;
-axis([0 L 0 L]);
-quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale","on", "AutoScaleFactor",0.5);
-hold on;
+if show_plot
+    figure;
+    axis equal;
+    axis([0 L 0 L]);
+    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale", "on", "AutoScaleFactor", 0.5);
+    hold on;
+end
 
 for t = 1:Time
     % Update positions
@@ -58,16 +63,32 @@ for t = 1:Time
     vel_data(:,:,t) = vel;
     theta_data(:,t) = theta;
 
-    % Update visualization
-    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale","on", "AutoScaleFactor",0.5);
-    axis equal;
-    axis([0 L 0 L]);
-    axis off
-    hold off
+    % Calculate and store polarization parameter
+    polarization_data(t) = abs(mean(exp(1i * theta)));
 
-    drawnow limitrate;
+    % Update visualization
+    if show_plot
+        quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale", "on", "AutoScaleFactor", 0.5);
+        axis equal;
+        axis([0 L 0 L]);
+        axis off
+        hold off
+        drawnow limitrate;
+    end
 
     if mod(t, 1000) == 0
-        fprintf('Simulation %s: Iteration %d/%d\n', params(p).name, t, Time);
+        fprintf('Iteration: %d/%d\n', t, Time);
     end
+end
+
+% Save the polarization data
+save('polarization_data.mat', 'polarization_data');
+
+% Plot polarization parameter over time if the flag is set
+if show_polarization_graph
+    figure;
+    plot(1:Time, polarization_data);
+    xlabel('Time');
+    ylabel('Polarization Parameter');
+    title('Polarization Parameter Over Time');
 end
