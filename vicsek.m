@@ -3,10 +3,9 @@ clear
 close all
 
 % Parameters
-N = 300; % Number of agents
+N = 500; % Number of agents
 Time = 10^4; % Time steps of simulation
 dt = 1; % Time step size
-
 sig = pi/12; % Noise strength
 v0 = 0.05; % Constant velocity
 L = 10; % Domain size
@@ -16,6 +15,11 @@ RI = 1; % Radius of interaction
 pos = rand(N, 2) * L; % Random initial positions within the domain
 theta = rand(N, 1) * 2 * pi; % Random initial orientations
 vel = v0 * [cos(theta) sin(theta)]; % Initial velocities
+
+% Store data for each case
+pos_data = zeros(N, 2, Time);
+vel_data = zeros(N, 2, Time);
+theta_data = zeros(N, Time);
 
 % Visualization setup
 figure;
@@ -49,12 +53,21 @@ for t = 1:Time
     % Update theta
     theta = new_theta;
 
+    % Store data
+    pos_data(:,:,t) = pos;
+    vel_data(:,:,t) = vel;
+    theta_data(:,t) = theta;
+
     % Update visualization
-    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', '.', 'ShowArrowHead', 'on', 'MarkerSize', 10);
+    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', '.', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale","on", "AutoScaleFactor",0.5);
     axis equal;
     axis([0 L 0 L]);
     axis off
     hold off
-    
+
     drawnow limitrate;
+
+    if mod(t, 1000) == 0
+        fprintf('Simulation %s: Iteration %d/%d\n', params(p).name, t, Time);
+    end
 end
