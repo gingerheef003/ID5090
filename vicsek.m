@@ -25,7 +25,7 @@ theta_data = zeros(N, Time);
 figure;
 axis equal;
 axis([0 L 0 L]);
-quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', '.', 'ShowArrowHead', 'on', 'MarkerSize', 10);
+quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10);
 hold on;
 
 for t = 1:Time
@@ -59,7 +59,7 @@ for t = 1:Time
     theta_data(:,t) = theta;
 
     % Update visualization
-    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', '.', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale","on", "AutoScaleFactor",0.5);
+    quiver(pos(:,1), pos(:,2), vel(:,1), vel(:,2), 'off', 'Marker', 'none', 'ShowArrowHead', 'on', 'MarkerSize', 10, "AutoScale","on", "AutoScaleFactor",0.5);
     axis equal;
     axis([0 L 0 L]);
     axis off
