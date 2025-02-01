@@ -7,11 +7,15 @@ n = 10;
 N = m*n;
 
 ZOR = 1;
+ZOO = 10 + ZOR;
+ZOA = 10 + ZOO;
 
 t_steps = 3*1e3;
 dt = 0.1;
 
+sight = 270;
 turn_rate = pi/8;
+err = 0.0;
 
 L = 50; % Domain size
 tankcenterX = 0;
@@ -48,6 +52,24 @@ for t = 2:t_steps
         isreplusion(k,k) = 0;
     end
 
+    isalignment = dist_ij>ZOR & dist_ij<=ZOO;
+    isattraction = dist_ij>ZOO & dist_ij<=ZOA;
+
+    issight = zeros(N);
+    for j = 1:N
+        for js = 1:N
+            if j~=js
+                angle = acosd(dot(vel(j,:,t-1), diff(pos([js,j],:,t-1),1)./norm(diff(pos([js,j],:,t-1),1))));
+                if angle < sight
+                    issight(j,js) = 1;
+                end
+            end
+        end
+    end
+
+    isalignment = isalignment .* issight;
+    isattraction = isattraction .* issight;
+
     for j = 1:N
         if sqrt((pos(j,1,t-1) - tankcenterX).^2 + (pos(j,2,t-1) - tankcenterY).^2) >= L
             db(1) = (tankcenterX - pos(j,1,t-1));
@@ -59,16 +81,41 @@ for t = 2:t_steps
 
             db = db./vecnorm(db);
             dj = db;
-        elseif sum (isreplusion(j,:)) > 0
+        elseif sum(isreplusion(j,:)) > 0
             jj = find(isreplusion(j,:));
 
             dr = [mean(pos(j,1,t-1) - pos(jj,1,t-1)) mean(pos(j,2,t-1) - pos(jj,2,t-1))];
             dr = dr./vecnorm(dr);
 
             dj = dr;
-        else
-            dj = vel(j,:,t-1);
+        elseif sum(isalignment(j,:))>0 || sum(isattraction(j,:))>0
+            jk = find(isalignment(j,:));
+            jl = find(isattraction(j,:));
+
+            if numel(jk)>0 && numel(jl)>0
+                dal = [mean(vel(jk,1,t-1)) mean(vel(jk,2,t-1))];
+                dal = dal./vecnorm(dal);
+
+                datt = [mean(pos(jl,1,t-1)) mean(pos(jl,2,t-1))];
+                datt = datt./vecnorm(datt);
+
+                ds = (dal + datt)/2;
+            elseif numel(jk)>0
+                dal = [mean(vel(jk,1,t-1)) mean(vel(jk,2,t-1))];
+                dal = dal./vecnorm(dal);
+
+                ds = dal;
+            elseif numel(jl)>0
+                datt = [mean(pos(jl,1,t-1)) mean(pos(jl,2,t-1))];
+                datt = datt./vecnorm(datt);
+
+                ds = datt;
+            end
+            dj = ds;
         end
+
+        dj = dj + err*rand(1,2);
+        dj = dj./norm(dj);
 
         turn_angle = atan2d((dj(2)*vel(j,1,t)-dj(1)*vel(j,2,t)), dj(1)*dj(2) + vel(j,1,t)*vel(j,2,t));
 
