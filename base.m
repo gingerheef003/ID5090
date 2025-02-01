@@ -9,6 +9,8 @@ N = m*n; % total number of agents
 t_steps = 3*1e3;
 dt = 0.1;
 
+turn_rate = pi/8;
+
 L = 50; % Domain size
 tankcenterX = 0;
 tankcenterY = 0;
@@ -52,13 +54,20 @@ for t = 2:t_steps
             dj = vel(j,:,t-1);
         end
 
-        vel(j,:,t) = dj;
+        turn_angle = atan2d((dj(2)*vel(j,1,t)-dj(1)*vel(j,2,t)), dj(1)*dj(2) + vel(j,1,t)*vel(j,2,t));
+
+        if abs(turn_angle) > turn_rate*dt
+            thetaj = atan2(vel(j,2,t), vel(j,1,t)) + sign(turn_angle)*turn_rate*dt;
+            vel(j,:,t) = [cos(thetaj) sin(thetaj)];
+        else
+            vel(j,:,t) = dj;
+        end
     end
 
 
     pos(:,:,t) = pos(:,:,t-1) + vel(:,:,t)*dt;
 
-    thc = linspace(0,2*pi,50); xc = L*cos(thc); yc = L*sin(thc); plot(xc,yc, '--k', LineWidth=3); hold all
+    thc = linspace(0,2*pi,50); xc = L*cos(thc); yc = L*sin(thc); plot(xc,yc, '--k', LineWidth=3); hold on
     quiver(pos(:,1,t), pos(:,2,t), vel(:,1,t), vel(:,2,t), "off", "Marker", ".", "ShowArrowHead", "on", "MarkerSize",20);
 
     axis equal;
