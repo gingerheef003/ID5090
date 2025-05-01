@@ -6,6 +6,11 @@ import math
 from collections import defaultdict
 import csv
 
+# Set random seed for reproducibility
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+
 plt.ion()
 
 # Simulation parameters
@@ -17,6 +22,7 @@ GENERATION_LENGTH = 30
 SAFE_ZONE_START = 7* GRID_SIZE // 8
 MUTATION_RATE = 0.001
 POPULATION_CAP = 800
+GENE_LENGTH = 15
 
 POSSIBLE_SENSORS = [
     'Sir', 'Sfd', 'Sg', 'LPF', 'Plr', 'Pfd', 'Pop',
@@ -28,6 +34,16 @@ POSSIBLE_ACTIONS = [
     'Mfd', 'Mrn', 'Mrv', 'MRL', 'MX', 'MY',
     'LPD', 'Kill', 'OSC', 'SG', 'Res'
 ]
+
+# Hexadecimal mappings for sensors and actions
+SENSOR_MAP = {name: idx for idx, name in enumerate(POSSIBLE_SENSORS)}
+ACTION_MAP = {name: idx for idx, name in enumerate(POSSIBLE_ACTIONS)}
+REVERSE_SENSOR_MAP = {idx: name for name, idx in SENSOR_MAP.items()}
+REVERSE_ACTION_MAP = {idx: name for name, idx in ACTION_MAP.items()}
+
+# Hexadecimal values for gene types
+GENE_TYPE_MAP = {'IH': 0x1, 'HO': 0x2}
+REVERSE_GENE_TYPE_MAP = {0x1: 'IH', 0x2: 'HO'}
 
 class Creature:
     def __init__(self, dna=None, position=None, birth_time=0):
@@ -41,8 +57,8 @@ class Creature:
         self.active_actions = self._get_active_actions()
         
         # Initialize sensors and actions dictionaries
-        self.sensors = {s: 0 for s in self.active_sensors}
-        self.actions = {a: 0 for a in self.active_actions}
+        self.sensors = {REVERSE_SENSOR_MAP[s]: 0 for s in self.active_sensors}
+        self.actions = {REVERSE_ACTION_MAP[a]: 0 for a in self.active_actions}
         
         self.color = self._generate_color()
         self.birth_time = birth_time
@@ -57,33 +73,38 @@ class Creature:
         
     def _initialize_dna(self):
         dna = []
-        for _ in range(15):
+        for _ in range(GENE_LENGTH):
             if random.random() < 0.5:
+                sensor_idx = random.choice(list(SENSOR_MAP.values()))
+                if sensor_idx not in SENSOR_MAP.values():
+                    raise ValueError(f"Invalid sensor index: {sensor_idx}")
                 dna.append((
-                    'IH',
-                    random.choice(POSSIBLE_SENSORS),
+                    GENE_TYPE_MAP['IH'],  # Hexadecimal for 'IH'
+                    sensor_idx,
                     random.randint(0, HIDDEN_NODES-1),
                     random.uniform(-1, 1)
                 ))
             else:
                 dna.append((
-                    'HO',
+                    GENE_TYPE_MAP['HO'],  # Hexadecimal for 'HO'
                     random.randint(0, HIDDEN_NODES-1),
-                    random.choice(POSSIBLE_ACTIONS),
+                    random.choice(list(ACTION_MAP.values())),
                     random.uniform(-1, 1)
                 ))
         return dna
 
     def _get_active_sensors(self):
-        return list({gene[1] for gene in self.dna if gene[0] == 'IH'})
+        active_sensors = list({gene[1] for gene in self.dna if gene[0] == GENE_TYPE_MAP['IH']})
+        print(f"Active sensors: {active_sensors}")  # Debug statement
+        return active_sensors
 
     def _get_active_actions(self):
-        return list({gene[2] for gene in self.dna if gene[0] == 'HO'})
+        return list({gene[2] for gene in self.dna if gene[0] == GENE_TYPE_MAP['HO']})
 
     def _generate_color(self):
         # Create DNA fingerprint ignoring weight values
         dna_fingerprint = tuple(sorted(
-            (g[0], g[1], g[2]) if g[0] == 'IH' else (g[0], g[1], g[2])
+            (g[0], g[1], g[2]) if g[0] == GENE_TYPE_MAP['IH'] else (g[0], g[1], g[2])
             for g in self.dna
         ))
         hue = hash(dna_fingerprint) % 360 / 360
@@ -98,12 +119,12 @@ class Creature:
                 mutated = list(gene)
                 mutated[-1] = np.clip(mutated[-1] + random.gauss(0, 0.1), -1, 1)
                 if random.random() < 0.1:
-                    if mutated[0] == 'IH':
-                        mutated[1] = random.choice(POSSIBLE_SENSORS)
+                    if mutated[0] == GENE_TYPE_MAP['IH']:  # Use hexadecimal for 'IH'
+                        mutated[1] = random.choice(list(SENSOR_MAP.values()))
                         mutated[2] = random.randint(0, HIDDEN_NODES-1)
                     else:
                         mutated[1] = random.randint(0, HIDDEN_NODES-1)
-                        mutated[2] = random.choice(POSSIBLE_ACTIONS)
+                        mutated[2] = random.choice(list(ACTION_MAP.values()))
                 new_dna.append(tuple(mutated))
                 mutations += 1
             else:
@@ -112,16 +133,16 @@ class Creature:
         if random.random() < MUTATION_RATE/10:
             if random.random() < 0.5:
                 new_dna.append((
-                    'IH',
-                    random.choice(POSSIBLE_SENSORS),
+                    GENE_TYPE_MAP['IH'],  # Use hexadecimal for 'IH'
+                    random.choice(list(SENSOR_MAP.values())),
                     random.randint(0, HIDDEN_NODES-1),
                     random.uniform(-1, 1)
                 ))
             else:
                 new_dna.append((
-                    'HO',
+                    GENE_TYPE_MAP['HO'],  # Use hexadecimal for 'HO'
                     random.randint(0, HIDDEN_NODES-1),
-                    random.choice(POSSIBLE_ACTIONS),
+                    random.choice(list(ACTION_MAP.values())),
                     random.uniform(-1, 1)
                 ))
             mutations += 1
@@ -143,99 +164,100 @@ class Creature:
         x, y = map(int, self.position)
         forward_dir = self._get_forward_direction()
         
-        if 'Sir' in self.sensors:
+        if SENSOR_MAP['Sir'] in self.sensors:
             left = pheromone_grid[max(0, x-1), y]
             right = pheromone_grid[min(GRID_SIZE-1, x+1), y]
-            self.sensors['Sir'] = np.clip((right - left)/max(1, right+left), -1, 1)
+            denominator = right + left
+            self.sensors[SENSOR_MAP['Sir']] = np.clip((right - left) / denominator if denominator > 0 else 0, -1, 1)
 
-        if 'Sfd' in self.sensors:
+        if SENSOR_MAP['Sfd'] in self.sensors:
             fx, fy = forward_dir
             forward_x, forward_y = int(x+fx), int(y+fy)
             if 0 <= forward_x < GRID_SIZE and 0 <= forward_y < GRID_SIZE:
                 forward = pheromone_grid[forward_x, forward_y]
                 current = pheromone_grid[x, y]
-                self.sensors['Sfd'] = np.clip((forward-current)/max(1, forward+current), -1, 1)
+                self.sensors[SENSOR_MAP['Sfd']] = np.clip((forward-current)/max(1, forward+current), -1, 1)
 
-        if 'Sg' in self.sensors:
-            self.sensors['Sg'] = np.clip(pheromone_grid[x, y]/10, 0, 1)
+        if SENSOR_MAP['Sg'] in self.sensors:
+            self.sensors[SENSOR_MAP['Sg']] = np.clip(pheromone_grid[x, y]/10, 0, 1)
 
-        if 'LPF' in self.sensors:
+        if SENSOR_MAP['LPF'] in self.sensors:
             fx, fy = forward_dir
             scan_x, scan_y = int(x+fx*self.long_probe_distance), int(y+fy*self.long_probe_distance)
             scan_x, scan_y = np.clip([scan_x, scan_y], 0, GRID_SIZE-1)
-            self.sensors['LPF'] = np.clip(creature_grid[scan_x, scan_y]/5, 0, 1)
+            self.sensors[SENSOR_MAP['LPF']] = np.clip(creature_grid[scan_x, scan_y]/5, 0, 1)
 
-        if 'Plr' in self.sensors:
-            left = np.mean(creature_grid[max(0,x-3):x, y])
-            right = np.mean(creature_grid[x:min(GRID_SIZE,x+3), y])
-            self.sensors['Plr'] = np.clip((right-left)/max(1,right+left), -1, 1)
+        if SENSOR_MAP['Plr'] in self.sensors:
+            left = np.mean(creature_grid[max(0, x-3):x, y])
+            right = np.mean(creature_grid[x:min(GRID_SIZE, x+3), y])
+            self.sensors[SENSOR_MAP['Plr']] = np.clip((right-left)/max(1, right+left), -1, 1)
 
-        if 'Pfd' in self.sensors:
+        if SENSOR_MAP['Pfd'] in self.sensors:
             fx, fy = forward_dir
             forward = np.mean([
                 creature_grid[int(x+fx*i), int(y+fy*i)]
-                for i in range(1,4)
+                for i in range(1, 4)
                 if 0 <= int(x+fx*i) < GRID_SIZE and 0 <= int(y+fy*i) < GRID_SIZE
             ])
             current = creature_grid[x, y]
-            self.sensors['Pfd'] = np.clip((forward-current)/max(1,forward+current), -1, 1)
+            self.sensors[SENSOR_MAP['Pfd']] = np.clip((forward-current)/max(1, forward+current), -1, 1)
 
-        if 'Pop' in self.sensors:
-            local = creature_grid[max(0,x-2):min(GRID_SIZE,x+3), max(0,y-2):min(GRID_SIZE,y+3)]
-            self.sensors['Pop'] = np.clip(np.sum(local)/25, 0, 1)
+        if SENSOR_MAP['Pop'] in self.sensors:
+            local = creature_grid[max(0, x-2):min(GRID_SIZE, x+3), max(0, y-2):min(GRID_SIZE, y+3)]
+            self.sensors[SENSOR_MAP['Pop']] = np.clip(np.sum(local)/25, 0, 1)
 
-        if 'LBf' in self.sensors:
+        if SENSOR_MAP['LBf'] in self.sensors:
             fx, fy = forward_dir
             for i in range(1, self.long_probe_distance+1):
                 check_x, check_y = int(x+fx*i), int(y+fy*i)
                 if not (0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE):
-                    self.sensors['LBf'] = 0
+                    self.sensors[SENSOR_MAP['LBf']] = 0
                     break
                 if creature_grid[check_x, check_y] > 0:
-                    self.sensors['LBf'] = 1 - i/self.long_probe_distance
+                    self.sensors[SENSOR_MAP['LBf']] = 1 - i/self.long_probe_distance
                     break
 
-        if 'Blr' in self.sensors:
-            left = any(creature_grid[max(0,x-i),y] > 0 for i in range(1,4))
-            right = any(creature_grid[min(GRID_SIZE-1,x+i),y] > 0 for i in range(1,4))
-            self.sensors['Blr'] = -1 if left else (1 if right else 0)
+        if SENSOR_MAP['Blr'] in self.sensors:
+            left = any(creature_grid[max(0, x-i), y] > 0 for i in range(1, 4))
+            right = any(creature_grid[min(GRID_SIZE-1, x+i), y] > 0 for i in range(1, 4))
+            self.sensors[SENSOR_MAP['Blr']] = -1 if left else (1 if right else 0)
 
-        if 'Bfd' in self.sensors:
+        if SENSOR_MAP['Bfd'] in self.sensors:
             fx, fy = forward_dir
             check_x, check_y = int(x+fx), int(y+fy)
-            self.sensors['Bfd'] = 1 if (not (0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE) or creature_grid[check_x, check_y] )> 0 else 0
+            self.sensors[SENSOR_MAP['Bfd']] = 1 if (not (0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE) or creature_grid[check_x, check_y] > 0) else 0
 
-        if 'LMx' in self.sensors:
-            self.sensors['LMx'] = self.last_movement[0]
-        if 'LMy' in self.sensors:
-            self.sensors['LMy'] = self.last_movement[1]
+        if SENSOR_MAP['LMx'] in self.sensors:
+            self.sensors[SENSOR_MAP['LMx']] = self.last_movement[0]
+        if SENSOR_MAP['LMy'] in self.sensors:
+            self.sensors[SENSOR_MAP['LMy']] = self.last_movement[1]
 
-        if 'BDx' in self.sensors:
-            self.sensors['BDx'] = min(x, GRID_SIZE-1-x)/GRID_SIZE
-        if 'BDy' in self.sensors:
-            self.sensors['BDy'] = min(y, GRID_SIZE-1-y)/GRID_SIZE
-        if 'BD' in self.sensors:
-            self.sensors['BD'] = min(x, GRID_SIZE-1-x, y, GRID_SIZE-1-y)/GRID_SIZE
-        if 'Lx' in self.sensors:
-            self.sensors['Lx'] = x/GRID_SIZE
-        if 'Ly' in self.sensors:
-            self.sensors['Ly'] = y/GRID_SIZE
+        if SENSOR_MAP['BDx'] in self.sensors:
+            self.sensors[SENSOR_MAP['BDx']] = min(x, GRID_SIZE-1-x)/GRID_SIZE
+        if SENSOR_MAP['BDy'] in self.sensors:
+            self.sensors[SENSOR_MAP['BDy']] = min(y, GRID_SIZE-1-y)/GRID_SIZE
+        if SENSOR_MAP['BD'] in self.sensors:
+            self.sensors[SENSOR_MAP['BD']] = min(x, GRID_SIZE-1-x, y, GRID_SIZE-1-y)/GRID_SIZE
+        if SENSOR_MAP['Lx'] in self.sensors:
+            self.sensors[SENSOR_MAP['Lx']] = x/GRID_SIZE
+        if SENSOR_MAP['Ly'] in self.sensors:
+            self.sensors[SENSOR_MAP['Ly']] = y/GRID_SIZE
 
-        if 'Age' in self.sensors:
-            self.sensors['Age'] = np.clip((current_time-self.birth_time)/1000, 0, 1)
-        if 'Osc' in self.sensors:
+        if SENSOR_MAP['Age'] in self.sensors:
+            self.sensors[SENSOR_MAP['Age']] = np.clip((current_time-self.birth_time)/1000, 0, 1)
+        if SENSOR_MAP['Osc'] in self.sensors:
             self.oscillator_phase += 0.1/self.oscillator_period
-            self.sensors['Osc'] = (math.sin(self.oscillator_phase)+1)/2
-        if 'Rnd' in self.sensors:
-            self.sensors['Rnd'] = random.random()
-        if 'Gen' in self.sensors:
+            self.sensors[SENSOR_MAP['Osc']] = (math.sin(self.oscillator_phase)+1)/2
+        if SENSOR_MAP['Rnd'] in self.sensors:
+            self.sensors[SENSOR_MAP['Rnd']] = random.random()
+        if SENSOR_MAP['Gen'] in self.sensors:
             fx, fy = forward_dir
             check_x, check_y = int(x+fx), int(y+fy)
             if (0 <= check_x < GRID_SIZE and 0 <= check_y < GRID_SIZE and 
                 creature_grid[check_x, check_y] > 0):
-                self.sensors['Gen'] = random.uniform(0.7, 1)
+                self.sensors[SENSOR_MAP['Gen']] = random.uniform(0.7, 1)
             else:
-                self.sensors['Gen'] = 0
+                self.sensors[SENSOR_MAP['Gen']] = 0
 
     def _execute_special_action(self, action):
         if action == 'LPD':
@@ -251,19 +273,19 @@ class Creature:
         hidden = np.zeros(HIDDEN_NODES)
         
         for gene in self.dna:
-            if gene[0] == 'IH':
-                _, sensor, h_idx, weight = gene
-                if sensor in self.sensors:
-                    hidden[h_idx] += self.sensors[sensor] * weight
-        
+            if gene[0] == GENE_TYPE_MAP['IH']:
+                _, sensor_idx, h_idx, weight = gene
+                if sensor_idx in self.sensors:
+                    hidden[h_idx] += self.sensors[sensor_idx] * weight
+
         hidden = np.tanh(hidden)
         
         action_values = defaultdict(float)
         for gene in self.dna:
-            if gene[0] == 'HO':
-                _, h_idx, action, weight = gene
-                if action in self.actions:
-                    action_values[action] += hidden[h_idx] * weight
+            if gene[0] == GENE_TYPE_MAP['HO']:
+                _, h_idx, action_idx, weight = gene
+                if action_idx in self.actions:
+                    action_values[action_idx] += hidden[h_idx] * weight
         
         for action in action_values:
             action_values[action] *= self.responsiveness
@@ -281,7 +303,8 @@ class Creature:
             selected_action = random.choices(actions, weights=probabilities, k=1)[0]
             self._execute_special_action(selected_action)
             return selected_action
-        except:
+        except (ZeroDivisionError, ValueError) as e:
+            print(f"Error in decide_action: {e}")
             return random.choice(list(self.actions.keys())) if self.actions else None
 
     def move(self, grid, action, pheromone_grid):
@@ -301,6 +324,9 @@ class Creature:
             'SG': np.array([0, 0]),
             'Res': np.array([0, 0])
         }
+        
+        if action in ['LPD', 'Kill', 'OSC', 'SG', 'Res']:
+            return False
         
         movement = move_map.get(action, np.array([0, 0]))
         
@@ -360,7 +386,7 @@ class Simulation:
                     [0, 0, GRID_SIZE-1, GRID_SIZE-1, 0], 
                     'k-', linewidth=2)
         
-        self.creature_plot = self.ax.scatter([], [], s=100, alpha=0.9, edgecolor='black')
+        self.creature_plot = self.ax.scatter([], [], s=100, alpha=0.9, edgecolor='black', facecolor='blue')
         self.info_text = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes,
                                     bbox=dict(facecolor='white', alpha=0.8))
         
@@ -381,8 +407,7 @@ class Simulation:
         
         for creature in self.population:
             for gene in creature.dna:
-                # Create fingerprint without the weight
-                if gene[0] == 'IH':
+                if gene[0] == GENE_TYPE_MAP['IH']:
                     fingerprint = (gene[0], gene[1], gene[2])
                 else:
                     fingerprint = (gene[0], gene[1], gene[2])
@@ -472,7 +497,7 @@ class Simulation:
         # Create new population using random gene selection
         for _ in range(POPULATION_CAP):
             # Randomly select genes from the gene pool
-            selected_genes = random.choices(gene_pool, k=15)  # Each creature has 15 genes
+            selected_genes = random.choices(gene_pool, k=GENE_LENGTH)
             
             creature = Creature(
                 dna=selected_genes,
@@ -535,8 +560,9 @@ def main():
     print("Press Ctrl+C to stop")
     
     sim = Simulation(generations_to_track=10)
+    MAX_GENERATIONS = 1000
     try:
-        while True:
+        while sim.generation < MAX_GENERATIONS:
             should_continue = sim.run_generation()
             if not should_continue:
                 break
