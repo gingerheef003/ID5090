@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import time
 import math
 from collections import defaultdict
+import csv
 
 plt.ion()
 
@@ -12,7 +13,7 @@ HIDDEN_NODES = 10
 FRAME_DELAY = 0.1
 GRID_SIZE = 128
 POPULATION_SIZE = 800
-GENERATION_LENGTH = 150
+GENERATION_LENGTH = 30
 SAFE_ZONE_START = 7* GRID_SIZE // 8
 MUTATION_RATE = 0.001
 POPULATION_CAP = 800
@@ -494,6 +495,15 @@ class Simulation:
         self._update_grids()
         return True
 
+    def save_metrics_to_csv(self, filename="simulation_metrics.csv"):
+        """Save survival rate and genetic diversity data to a CSV file."""
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Generation", "Survival Rate (%)", "Genetic Diversity"])
+            for gen, survival_rate, diversity in zip(self.generation_numbers, self.survival_rates, self.genetic_diversities):
+                writer.writerow([gen, survival_rate, diversity])
+        print(f"Metrics saved to {filename}")
+
     def plot_metrics(self):
         plt.ioff()
         
@@ -537,6 +547,9 @@ def main():
         print(f"\nFinal stats:")
         print(f"- Total generations: {sim.generation}")
         print(f"- Last survivors: {sim.survivors_last_gen}")
+        
+        # Save metrics to CSV
+        sim.save_metrics_to_csv("simulation_metrics.csv")
         
         # Plot the metrics
         sim.plot_metrics()
