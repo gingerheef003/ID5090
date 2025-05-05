@@ -1,3 +1,5 @@
+
+
 clc
 clear
 close all
@@ -10,13 +12,11 @@ f = 0.5; % fraction of group 1
 max_iter = 5000;
 
 show_frac_satis = 0;
-show_modularity = 0;
-show_segregation_coeff = 0;
 
 % [A, n_e] = initialize_grid(N, e, f);
-% [A, segregation_index, avg_similarity, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis, show_modularity, show_segregation_coeff);
-% visualize_results(A, segregation_index, avg_similarity, show_frac_satis, frac_satis, show_modularity, modularity);
+% [A, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis);
 
+%% Function definitions
 
 function [A, n_e] = initialize_grid(N, e, f)
     n_e = floor(N^2 * e);
@@ -30,12 +30,11 @@ function [A, n_e] = initialize_grid(N, e, f)
     A(randomInd(g1+1:end)) = 2;
 end
 
-function [A, segregation_index, avg_similarity, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis, show_modularity, show_segregation_coeff)
+function [A, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis)
     N = size(A, 1);
     g = nnz(A ~= 0);
     kernel = [1 1 1; 1 0 1; 1 1 1];
-    segregation_index = zeros(max_iter, 1);
-    avg_similarity = zeros(max_iter, 1);
+
     frac_satis = zeros(max_iter, 1);
     modularity = zeros(max_iter, 1);
 
@@ -63,33 +62,16 @@ function [A, segregation_index, avg_similarity, frac_satis, modularity] = run_si
         idx = randperm(n_vac);
         filling = filling(idx);
         A(A == 0) = filling;
-
-        % CHANGE: Calculate and store metrics
-        segregation_index(t) = calculate_segregation_index(A);
-        avg_similarity(t) = mean([(neigh1(A==1) ./ neighs(A==1)); (neigh2(A==2) ./ neighs(A==2))]);
         
         if show_frac_satis
             satis = g - n_diss1 - n_diss2; 
             frac_satis(t) = satis / g;
         end
-        if show_modularity
-            modularity(t) = compute_modularity(A);
-        end
 
-        % CHANGE: Visualize in real-time
-        subplot(1,2,1);
         imagesc(A);
         colormap([1 1 1; 1 0 0; 0 0 1]);
         axis equal off;
         title(sprintf('Iteration %d', t));
-
-        subplot(1,2,2);
-        plot(1:t, segregation_index(1:t), 'b-', 1:t, avg_similarity(1:t), 'r-', 1:t, frac_satis(1:t), 'g-', 'LineWidth', 2);
-        legend('Segregation Index', 'Avg Similarity', 'Fraction Satisfied');
-        xlabel('Iteration');
-        ylabel('Metric Value');
-        title('Segregation Metrics');
-
         drawnow;
 
         if n_diss1 == 0 && n_diss2 == 0
@@ -97,34 +79,21 @@ function [A, segregation_index, avg_similarity, frac_satis, modularity] = run_si
         end
 
     end
-    segregation_index = segregation_index(1:t);
-    avg_similarity = avg_similarity(1:t);
+
     frac_satis = frac_satis(1:t);
     modularity = modularity(1:t);
 
-    if show_segregation_coeff
-        disp('Segregation Coefficient')
-        disp(compute_segregation_coefficient(A))
+    if show_frac_satis
+        figure;
+        plot(frac_satis, 'b-');
+        title('Fraction Satisfied vs Time');
+        xlabel('Iteration');
+        ylabel('Fraction Satisfied');
     end
 end
 
-% CHANGE: Added new function to calculate segregation index
-function index = calculate_segregation_index(A)
-    horizontal_edges = sum(sum(diff(A,1,2)~=0));
-    horizontal_same = sum(sum(diff(A,1,2)==0 & A(:,1:end-1)~=0));
-    
-    vertical_edges = sum(sum(diff(A,1,1)~=0));
-    vertical_same = sum(sum(diff(A,1,1)==0 & A(1:end-1,:)~=0));
-    
-    total_edges = horizontal_edges + vertical_edges;
-    same_group_edges = horizontal_same + vertical_same;
-    
-    index = same_group_edges / total_edges;
-end
-
-function Q = compute_modularity(A)
+function Adj = create_adjacency_matrix(A)
     [N, ~] = size(A);
-
     [row, col] = find(A ~= 0);
     num_nodes = length(row);
 
@@ -133,9 +102,6 @@ function Q = compute_modularity(A)
     offsets = [-1, -1; -1, 0; -1, 1;
                 0, -1;        0, 1;
                 1, -1;  1, 0;  1, 1];
-
-    k = zeros(num_nodes, 1);
-    m = 0;
 
     for i = 1:num_nodes
         for j = i+1:num_nodes
@@ -152,14 +118,23 @@ function Q = compute_modularity(A)
             if is_neighbor
                 Adj(i, j) = 1;
                 Adj(j, i) = 1;
-                k(i) = k(i) + 1;
-                k(j) = k(j) + 1;
-                m = m + 1;
             end
         end
     end
+end
+
+function Q = compute_modularity(A)
+
+    [row, col] = find(A ~= 0);
+    num_nodes = length(row);
+
+    Adj = create_adjacency_matrix(A);
+
+    k = sum(Adj, 2);
+    m = sum(k) / 2;
 
     Q = 0;
+
     for i = 1:num_nodes
         for j = 1:num_nodes
             if A(row(i), col(i)) == A(row(j), col(j))
@@ -171,89 +146,33 @@ function Q = compute_modularity(A)
     Q = Q / (2 * m);
 end
 
-function visualize_results(A, segregation_index, avg_similarity, show_frac_satis, frac_satis, show_modularity, modularity)
-    figure('Position', [100, 100, 800, 600]);
+function [cluster_sizes1, cluster_sizes2, segregation_coeff] = compute_segregation_coefficient(A)
+    g = nnz(A);
 
-    subplot(2,2,1);
-    imagesc(A);
-    colormap([1 1 1; 1 0 0; 0 0 1]);
-    axis equal off;
-    title('Final Population Map');
+    clusters1 = bwconncomp(A == 1);
+    cluster_sizes1 = cellfun(@numel, clusters1.PixelIdxList);
 
-    subplot(2,2,2);
-    histogram(A(A~=0));
-    title('Population Distribution');
-    xlabel('Group');
-    ylabel('Count');
+    clusters2 = bwconncomp(A == 2);
+    cluster_sizes2 = cellfun(@numel, clusters2.PixelIdxList);
 
-    subplot(2,2,3);
-    plot(segregation_index, 'b-');
-    title('Segregation Index Over Time');
-    xlabel('Iteration');
-    ylabel('Segregation Index');
-
-    subplot(2,2,4);
-    plot(avg_similarity, 'r-');
-    title('Average Similarity Over Time');
-    xlabel('Iteration');
-    ylabel('Average Similarity');
-
-    if show_frac_satis
-        figure;
-        plot(frac_satis, 'g-');
-        title('Fraction Satisfied vs Time');
-        xlabel('Iteration');
-        ylabel('Fraction Satisfied');
-    end
-
-    if show_modularity
-        figure;
-        plot(modularity, 'b-');
-        title('Modularity vs Time');
-        xlabel('Iteration');
-        ylabel('Modularity');
-    end
-    
+    sum_sq = sum(cluster_sizes1.^2) + sum(cluster_sizes2.^2);
+    segregation_coeff = (2 * sum_sq) / (g^2);
 end
-
-function clusters = identify_clusters(A)
-    % Identify clusters using DBSCAN
-    % Convert matrix A to a list of points
-    [row, col] = find(A ~= 0);
-    data = [row, col];
-
-    % Parameters for DBSCAN
-    epsilon = 1; % Maximum distance to be considered as a neighbor
-    minPts = 2; % Minimum number of points to form a dense region
-
-    % Run DBSCAN
-    clusters = dbscan(data, epsilon, minPts);
-end
-
-function s = compute_segregation_coefficient(A)
-    total_agents = nnz(A);
-    clusters = bwconncomp(A ~= 0);
-
-    cluster_sizes = cellfun(@numel, clusters.PixelIdxList);
-    sum_of_squares = sum(cluster_sizes.^2);
-
-    s = (2 * sum_of_squares) / (total_agents^2);
-end
-
 
 
 %% Problem 1
 N = 50;
 p = 0.65;
-e = 0.75;
+e = 0.0075;
 f = 0.5;
 
 show_frac_satis = 1;
-show_modularity = 1;
 
 [A, n_e] = initialize_grid(N, e, f);
-[A, segregation_index, avg_similarity, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis, show_modularity, show_segregation_coeff);
-visualize_results(A, segregation_index, avg_similarity, show_frac_satis, frac_satis, show_modularity, modularity);
+A =  run_simulation(A, p, max_iter, n_e, show_frac_satis);
+
+disp('Modularity')
+disp(compute_modularity(A));
 
 %% Problem 2
 N = 100;
@@ -262,14 +181,104 @@ e = 0.1;
 f = 0.5;
 
 show_frac_satis = 0;
-show_modularity = 0;
-
 [A, n_e] = initialize_grid(N, e, f);
-[A, segregation_index, avg_similarity, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis, show_modularity, show_segregation_coeff);
-visualize_results(A, segregation_index, avg_similarity, show_frac_satis, frac_satis, show_modularity, modularity);
+run_simulation(A, p, max_iter, n_e, show_frac_satis);
 
 %% Problem 3
-show_segregation_coeff = 1;
+N = 100;
+p = 0.3;
+e = 0.1;
+f = 0.5;
+
+show_frac_satis = 0;
 
 [A, n_e] = initialize_grid(N, e, f);
-[A, segregation_index, avg_similarity, frac_satis, modularity] = run_simulation(A, p, max_iter, n_e, show_frac_satis, show_modularity, show_segregation_coeff);
+A = run_simulation(A, p, max_iter, n_e, show_frac_satis);
+[cluster_sizes1, cluster_sizes2, segregation_coeff] = compute_segregation_coefficient(A);
+
+disp('Cluster sizes of group 1');
+disp(cluster_sizes1);
+disp('Cluster sizes of group 2');
+disp(cluster_sizes2);
+
+disp('Segregation Coeff');
+disp(segregation_coeff)
+
+disp('Modularity')
+disp(compute_modularity(A));
+
+%% Problem 4
+N = 100;
+
+show_frac_satis = 0;
+
+p = 0.75;
+e = 0.8;
+f = 0.5;
+[A, n_e] = initialize_grid(N, e, f);
+A = run_simulation(A, p, max_iter, n_e, show_frac_satis,);
+[~, ~, segregation_coeff] = compute_segregation_coefficient(A);
+
+disp('Segregation Coeff (case 1)');
+disp(segregation_coeff);
+
+p = 0.75;
+e = 0.1;
+f = 0.1;
+[A, n_e] = initialize_grid(N, e, f);
+A = run_simulation(A, p, max_iter, n_e, show_frac_satis);
+[~, ~, segregation_coeff] = compute_segregation_coefficient(A);
+
+disp('Segregation Coeff (case 2)');
+disp(segregation_coeff);
+
+p = 0.2;
+e = 0.1;
+f = 0.5;
+[A, n_e] = initialize_grid(N, e, f);
+A = run_simulation(A, p, max_iter, n_e, show_frac_satis);
+[~, ~, segregation_coeff] = compute_segregation_coefficient(A);
+
+disp('Segregation Coeff (case 3)');
+disp(segregation_coeff);
+
+%% Problem 5
+p = 0.3;
+e = 0.1;
+f = 0.5;
+Ns = [10, 25, 50, 75, 100, 125, 150, 175, 200];
+
+segregation_coeffs = zeros(size(Ns));
+average_cluster_sizes = zeros(size(Ns));
+
+for idx = 1:length(Ns)
+    N = Ns(idx); 
+    
+    [A, n_e] = initialize_grid(N, e, f);
+    A = run_simulation(A, p, max_iter, n_e, false, false);
+    
+    [cluster_sizes1, cluster_sizes2, segregation_coeff] = compute_segregation_coefficient(A);
+    segregation_coeffs(idx) = segregation_coeff;
+    
+    average_cluster_sizes(idx) = mean([cluster_sizes1 cluster_sizes2]); % Average size
+    
+    fprintf('Domain Size: %d x %d\n', N, N);
+    fprintf('Segregation Coefficient: %.4f\n', segregation_coeff);
+    fprintf('Average Cluster Size: %.2f\n\n', average_cluster_sizes(idx));
+end
+
+% Plot results
+figure;
+subplot(2, 1, 1);
+plot(Ns, segregation_coeffs, 'o-', 'LineWidth', 2);
+xlabel('Domain Size (N)');
+ylabel('Segregation Coefficient');
+title('Scaling of Segregation Coefficient with Domain Size');
+grid on;
+
+subplot(2, 1, 2);
+plot(Ns, average_cluster_sizes, 'o-', 'LineWidth', 2);
+xlabel('Domain Size (N)');
+ylabel('Average Cluster Size');
+title('Scaling of Average Cluster Size with Domain Size');
+grid on;

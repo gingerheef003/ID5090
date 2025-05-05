@@ -5,20 +5,22 @@ import matplotlib.pyplot as plt
 import time
 import math
 from collections import defaultdict
+import datetime  # Add this import at the top of the file
 
 plt.ion()
 
 # Simulation parameters
-HIDDEN_NODES = 4
+HIDDEN_NODES = 7
 FRAME_DELAY = 0.1
 GRID_SIZE = 128
 POPULATION_SIZE = 800
 GENERATION_LENGTH = 150
-SAFE_ZONE_START = 7* GRID_SIZE // 8
+SAFE_ZONE_START = 4* GRID_SIZE // 8
 MUTATION_RATE = 0.001
 POPULATION_CAP = 800
 GENE_LENGTH = 15
-MAX_GENERATIONS = 1000
+MAX_GENERATIONS = 200
+DRAW_SIM = False
 
 POSSIBLE_SENSORS = [
     'Sir', 'Sfd', 'Sg', 'LPF', 'Plr', 'Pfd', 'Pop',
@@ -337,7 +339,7 @@ class Creature:
         return False
 
 class Simulation:
-    def __init__(self, generations_to_track=50):
+    def __init__(self, generations_to_track=50, draw_simulation=DRAW_SIM):
         self.grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
         self.creature_grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
         self.pheromone_grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=float)
@@ -353,18 +355,22 @@ class Simulation:
         self.genetic_diversities = []
         self.generation_numbers = []
         
-        self.fig, self.ax = plt.subplots(figsize=(12, 10))
-        self.ax.set_xlim(0, GRID_SIZE-1)
-        self.ax.set_ylim(0, GRID_SIZE-1)
-        self.ax.set_title(f"Evolution Simulation (Hidden Nodes: {HIDDEN_NODES})")
-        self.ax.axvspan(SAFE_ZONE_START, GRID_SIZE-1, facecolor='#90EE90', alpha=0.3)
-        self.ax.plot([0, GRID_SIZE-1, GRID_SIZE-1, 0, 0], 
-                    [0, 0, GRID_SIZE-1, GRID_SIZE-1, 0], 
-                    'k-', linewidth=2)
+        # Visualization flag
+        self.draw_simulation = draw_simulation
         
-        self.creature_plot = self.ax.scatter([], [], s=100, alpha=0.9, edgecolor='black')
-        self.info_text = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes,
-                                    bbox=dict(facecolor='white', alpha=0.8))
+        if self.draw_simulation:
+            self.fig, self.ax = plt.subplots(figsize=(12, 10))
+            self.ax.set_xlim(0, GRID_SIZE-1)
+            self.ax.set_ylim(0, GRID_SIZE-1)
+            self.ax.set_title(f"Evolution Simulation (Hidden Nodes: {HIDDEN_NODES})")
+            self.safe_zone_patch = self.ax.axvspan(SAFE_ZONE_START, GRID_SIZE-1, facecolor='#90EE90', alpha=0.3)
+            self.ax.plot([0, GRID_SIZE-1, GRID_SIZE-1, 0, 0], 
+                        [0, 0, GRID_SIZE-1, GRID_SIZE-1, 0], 
+                        'k-', linewidth=2)
+            
+            self.creature_plot = self.ax.scatter([], [], s=100, alpha=0.9, edgecolor='black')
+            self.info_text = self.ax.text(0.02, 0.95, '', transform=self.ax.transAxes,
+                                        bbox=dict(facecolor='white', alpha=0.8))
         
         self._update_grids()
 
@@ -376,6 +382,20 @@ class Simulation:
             if 0 <= x < GRID_SIZE and 0 <= y < GRID_SIZE:
                 self.grid[x, y] += 1
                 self.creature_grid[x, y] += 1
+
+    def _update_safe_zone_visualization(self):
+        """Update the color of the safe zone based on the current generation."""
+        if not self.draw_simulation:
+            return
+        
+        if self.generation < MAX_GENERATIONS // 2:
+            # Right part is the safe zone
+            self.safe_zone_patch.remove()
+            self.safe_zone_patch = self.ax.axvspan(SAFE_ZONE_START, GRID_SIZE-1, facecolor='#90EE90', alpha=0.3)
+        else:
+            # Left part is the safe zone
+            self.safe_zone_patch.remove()
+            self.safe_zone_patch = self.ax.axvspan(0, SAFE_ZONE_START, facecolor='#ADD8E6', alpha=0.3)
 
     def _calculate_genetic_diversity(self):
         # Count unique gene combinations (ignoring weights)
@@ -392,29 +412,10 @@ class Simulation:
         
         return len(gene_fingerprints)
 
-    def run_frame(self):
-        self.current_time += 1
-        self.current_frame += 1
-        
-        self.pheromone_grid *= 0.95
-        self._update_grids()
-        random.shuffle(self.population)
-        
-        for creature in self.population:
-            creature.update_sensors(
-                grid=self.grid,
-                current_time=self.current_time,
-                pheromone_grid=self.pheromone_grid,
-                creature_grid=self.creature_grid
-            )
-            
-            action = creature.decide_action()
-            creature.move(self.grid, action, self.pheromone_grid)
-        
-        self._update_visualization()
-        time.sleep(FRAME_DELAY)
-
     def _update_visualization(self):
+        if not self.draw_simulation:
+            return
+        
         positions = np.array([c.position for c in self.population])
         colors = [c.color for c in self.population]
         self.creature_plot.set_offsets(positions)
@@ -437,12 +438,40 @@ class Simulation:
         plt.draw()
         plt.pause(0.001)
 
+    def run_frame(self):
+        self.current_time += 1
+        self.current_frame += 1
+        
+        self.pheromone_grid *= 0.95
+        self._update_grids()
+        random.shuffle(self.population)
+        
+        for creature in self.population:
+            creature.update_sensors(
+                grid=self.grid,
+                current_time=self.current_time,
+                pheromone_grid=self.pheromone_grid,
+                creature_grid=self.creature_grid
+            )
+            
+            action = creature.decide_action()
+            creature.move(self.grid, action, self.pheromone_grid)
+        
+        self._update_visualization()
+
     def run_generation(self):
         self.current_frame = 0
         for _ in range(GENERATION_LENGTH):
             self.run_frame()
         
-        survivors = [c for c in self.population if c.position[0] >= SAFE_ZONE_START]
+        # Determine survivors based on the current survival zone
+        if self.generation < MAX_GENERATIONS // 2:
+            # Right part is the safe zone
+            survivors = [c for c in self.population if c.position[0] >= SAFE_ZONE_START]
+        else:
+            # Left part is the safe zone
+            survivors = [c for c in self.population if c.position[0] < SAFE_ZONE_START]
+        
         self.survivors_last_gen = len(survivors)
         
         # Calculate and store metrics
@@ -453,11 +482,8 @@ class Simulation:
         self.genetic_diversities.append(genetic_diversity)
         self.generation_numbers.append(self.generation)
         
-        # Keep only the last k generations in memory
-        # if len(self.survival_rates) > self.generations_to_track:
-        #     self.survival_rates.pop(0)
-        #     self.genetic_diversities.pop(0)
-        #     self.generation_numbers.pop(0)
+        # Update the safe zone visualization
+        self._update_safe_zone_visualization()
         
         if len(survivors) == 0:
             print(f"\nTerminating: No survivors in generation {self.generation}")
@@ -497,14 +523,29 @@ class Simulation:
         self._update_grids()
         return True
 
-    def save_metrics_to_csv(self, filename="simulation_metrics.csv"):
+    def save_metrics_to_csv(self, filename_prefix="simulation_metrics"):
         """Save survival rate and genetic diversity data to a CSV file."""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # Generate timestamp
+        filename = f"{filename_prefix}_{timestamp}.csv"  # Append timestamp to filename
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["Generation", "Survival Rate (%)", "Genetic Diversity"])
             for gen, survival_rate, diversity in zip(self.generation_numbers, self.survival_rates, self.genetic_diversities):
                 writer.writerow([gen, survival_rate, diversity])
         print(f"Metrics saved to {filename}")
+
+    def save_genomes_to_csv(self, filename_prefix="creature_genomes"):
+        """Save the genome of all creatures to a CSV file."""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")  # Generate timestamp
+        filename = f"{filename_prefix}_{timestamp}.csv"  # Append timestamp to filename
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["Creature ID", "Genome"])  # Header row
+            for idx, creature in enumerate(self.population):
+                # Convert the DNA (list of tuples) to a string for saving
+                genome_str = ";".join([f"{gene}" for gene in creature.dna])
+                writer.writerow([idx, genome_str])
+        print(f"Genomes saved to {filename}")
 
     def plot_metrics(self):
         plt.ioff()
@@ -550,7 +591,9 @@ def main():
         print(f"- Total generations: {sim.generation}")
         print(f"- Last survivors: {sim.survivors_last_gen}")
         
+        # Save metrics and genomes
         sim.save_metrics_to_csv(f"simulation_metrics.csv")
+        sim.save_genomes_to_csv(f"creature_genomes.csv")
         sim.plot_metrics()
 
 if __name__ == "__main__":
